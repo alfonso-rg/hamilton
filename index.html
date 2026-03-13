@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Hamilton (2 estados) — teoría + evidencia EEUU</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #121933;
+      --muted: #aab3d2;
+      --text: #eef2ff;
+      --accent: #6ea8fe;
+      --accent2: #ffb86b;
+      --ok: #7ce38b;
+      --danger: #ff8a8a;
+      --border: #2a355f;
+      --shadow: 0 10px 24px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% -10%, #182450 0%, var(--bg) 42%);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      line-height: 1.42;
+      padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    }
+    .wrap { max-width: 1050px; margin: 0 auto; padding: 14px; }
+    h1 { margin: 10px 0 4px; font-size: clamp(1.35rem, 4vw, 2rem); }
+    h2 { margin: 0 0 8px; font-size: 1.05rem; }
+    p, li { color: var(--muted); }
+    .lead { margin: 0 0 12px; font-size: .98rem; }
+    .grid { display: grid; gap: 12px; }
+    .controls { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    @media (min-width: 900px) {
+      .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.03), transparent 18%), var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+    label { display: block; font-size: .86rem; color: #c8d2ff; margin-bottom: 6px; }
+    select, input, button {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #3a4b84;
+      background: #0d1430;
+      color: var(--text);
+      padding: 10px;
+      font-size: .95rem;
+    }
+    button {
+      cursor: pointer;
+      background: linear-gradient(90deg, #3f7dff, #5aa2ff);
+      border: 0;
+      font-weight: 600;
+    }
+    button:disabled { opacity: .5; cursor: wait; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .meta { font-size: .85rem; color: #c6cff8; }
+    .status { font-size: .86rem; min-height: 1.2rem; }
+    .stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    @media (min-width: 760px) {
+      .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    .pill {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      background: #0e1532;
+    }
+    .pill b { display: block; font-size: .8rem; color: #b8c3f2; }
+    .pill span { font-size: 1rem; font-variant-numeric: tabular-nums; }
+    canvas {
+      width: 100%;
+      height: 280px;
+      display: block;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #0a1129;
+    }
+    .legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: .82rem; color: #c8d2ff; }
+    .dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; margin-right: 6px; }
+    details { border-top: 1px dashed #3b4e8a; margin-top: 12px; padding-top: 8px; }
+    code { color: #ffd69b; }
+    .footer { text-align: center; font-size: .8rem; margin: 14px 0 30px; color: #90a0d8; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Modelo de Hamilton (2 estados): teoría + datos reales de EEUU</h1>
+    <p class="lead">Visualiza un régimen <strong>expansivo</strong> y otro <strong>recesivo</strong> con medias y varianzas distintas. La app estima un HMM gaussiano de 2 estados (filtro/suavizado) directamente en tu navegador.</p>
+
+    <section class="card grid controls">
+      <div>
+        <label for="series">Serie macro de EEUU (FRED)</label>
+        <select id="series">
+          <option value="UNRATE">UNRATE — Tasa de paro (%)</option>
+          <option value="INDPRO">INDPRO — Producción industrial (índice)</option>
+          <option value="PAYEMS">PAYEMS — Empleo no agrícola (miles)</option>
+          <option value="CPIAUCSL">CPIAUCSL — IPC (índice)</option>
+          <option value="GDPC1">GDPC1 — PIB real trimestral</option>
+        </select>
+      </div>
+      <div>
+        <label for="transform">Transformación</label>
+        <select id="transform">
+          <option value="level">Nivel</option>
+          <option value="diff">Diferencia Δxₜ</option>
+          <option value="logdiff" selected>Crecimiento logarítmico 100·Δln(xₜ)</option>
+        </select>
+      </div>
+      <div class="row">
+        <div>
+          <label for="window">Observaciones más recientes</label>
+          <input id="window" type="number" min="120" max="2400" step="12" value="360" />
+        </div>
+        <div>
+          <label for="iters">Iteraciones EM</label>
+          <input id="iters" type="number" min="5" max="100" value="35" />
+        </div>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button id="runBtn">Cargar, estimar y visualizar</button>
+      </div>
+      <div class="meta" id="meta"></div>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="card" style="margin-top:12px;">
+      <h2>Parámetros estimados (estados ordenados por media)</h2>
+      <div class="stat-grid" id="stats"></div>
+    </section>
+
+    <section class="card" style="margin-top:12px;">
+      <h2>Serie transformada y media por estado</h2>
+      <canvas id="seriesChart" width="1000" height="320"></canvas>
+      <div class="legend">
+        <span><i class="dot" style="background:#a6b8ff"></i>Dato transformado</span>
+        <span><i class="dot" style="background:#76e38e"></i>Media estado 0</span>
+        <span><i class="dot" style="background:#ffb86b"></i>Media estado 1</span>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:12px;">
+      <h2>Probabilidad suavizada de “estado alto”</h2>
+      <canvas id="probChart" width="1000" height="320"></canvas>
+      <div class="legend">
+        <span><i class="dot" style="background:#6ea8fe"></i>P(Sₜ = estado de mayor media | Y₁:ₜ)</span>
+        <span><i class="dot" style="background:#ff8a8a"></i>Umbral 0.5</span>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:12px;">
+      <h2>Interpretación rápida</h2>
+      <ul id="insights"></ul>
+      <details>
+        <summary>Base teórica (Hamilton 1989 simplificado)</summary>
+        <p>
+          Suponemos un proceso oculto <code>Sₜ ∈ {0,1}</code> con transición de Markov de primer orden:
+          <code>P(Sₜ=j | Sₜ₋₁=i)=pᵢⱼ</code>.
+          Dado el estado, la observación sigue una normal con parámetros específicos:
+          <code>yₜ | Sₜ=s ~ N(μₛ, σ²ₛ)</code>.
+        </p>
+        <p>
+          El algoritmo <strong>forward-backward</strong> entrega probabilidades filtradas/suavizadas y EM maximiza la log-verosimilitud para estimar
+          <code>μ₀, μ₁, σ₀², σ₁², P</code>. En esta demo, además de distinta media permitimos distinta varianza para capturar volatilidad asimétrica entre regímenes.
+        </p>
+      </details>
+    </section>
+
+    <p class="footer">Fuente de datos: API CSV pública de FRED (Federal Reserve Bank of St. Louis).</p>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const state = {
+      dates: [],
+      y: [],
+      gamma: [],
+      params: null,
+      highState: 1,
+      seriesName: ''
+    };
+
+    function fmt(x, d = 3) {
+      return Number.isFinite(x) ? x.toFixed(d) : '—';
+    }
+
+    function parseFRED(csv) {
+      const rows = csv.trim().split(/\r?\n/).slice(1);
+      const dates = [];
+      const values = [];
+      for (const line of rows) {
+        const [date, raw] = line.split(',');
+        const v = Number(raw);
+        if (!date || !Number.isFinite(v)) continue;
+        dates.push(date);
+        values.push(v);
+      }
+      return { dates, values };
+    }
+
+    function transform(values, mode) {
+      const y = [];
+      const idxMap = [];
+      if (mode === 'level') {
+        for (let i = 0; i < values.length; i++) {
+          y.push(values[i]);
+          idxMap.push(i);
+        }
+      } else if (mode === 'diff') {
+        for (let i = 1; i < values.length; i++) {
+          y.push(values[i] - values[i - 1]);
+          idxMap.push(i);
+        }
+      } else {
+        for (let i = 1; i < values.length; i++) {
+          const a = values[i - 1];
+          const b = values[i];
+          if (a > 0 && b > 0) {
+            y.push(100 * (Math.log(b) - Math.log(a)));
+            idxMap.push(i);
+          }
+        }
+      }
+      return { y, idxMap };
+    }
+
+    function normalPDF(x, mu, sigma2) {
+      const s2 = Math.max(sigma2, 1e-8);
+      const z = x - mu;
+      return Math.exp(-0.5 * z * z / s2) / Math.sqrt(2 * Math.PI * s2);
+    }
+
+    function forwardBackward(y, pi, A, mu, sigma2) {
+      const T = y.length;
+      const alpha = Array.from({ length: T }, () => [0, 0]);
+      const beta = Array.from({ length: T }, () => [0, 0]);
+      const c = new Array(T).fill(0);
+
+      for (let s = 0; s < 2; s++) alpha[0][s] = pi[s] * normalPDF(y[0], mu[s], sigma2[s]);
+      c[0] = alpha[0][0] + alpha[0][1] || 1e-12;
+      alpha[0][0] /= c[0]; alpha[0][1] /= c[0];
+
+      for (let t = 1; t < T; t++) {
+        for (let s = 0; s < 2; s++) {
+          const pred = alpha[t - 1][0] * A[0][s] + alpha[t - 1][1] * A[1][s];
+          alpha[t][s] = pred * normalPDF(y[t], mu[s], sigma2[s]);
+        }
+        c[t] = alpha[t][0] + alpha[t][1] || 1e-12;
+        alpha[t][0] /= c[t]; alpha[t][1] /= c[t];
+      }
+
+      beta[T - 1] = [1, 1];
+      for (let t = T - 2; t >= 0; t--) {
+        for (let s = 0; s < 2; s++) {
+          beta[t][s] = (
+            A[s][0] * normalPDF(y[t + 1], mu[0], sigma2[0]) * beta[t + 1][0] +
+            A[s][1] * normalPDF(y[t + 1], mu[1], sigma2[1]) * beta[t + 1][1]
+          ) / c[t + 1];
+        }
+      }
+
+      const gamma = Array.from({ length: T }, () => [0, 0]);
+      const xi = Array.from({ length: T - 1 }, () => [[0,0],[0,0]]);
+
+      for (let t = 0; t < T; t++) {
+        const g0 = alpha[t][0] * beta[t][0];
+        const g1 = alpha[t][1] * beta[t][1];
+        const gsum = g0 + g1 || 1e-12;
+        gamma[t][0] = g0 / gsum;
+        gamma[t][1] = g1 / gsum;
+      }
+
+      for (let t = 0; t < T - 1; t++) {
+        let denom = 0;
+        for (let i = 0; i < 2; i++) {
+          for (let j = 0; j < 2; j++) {
+            xi[t][i][j] = alpha[t][i] * A[i][j] * normalPDF(y[t+1], mu[j], sigma2[j]) * beta[t+1][j];
+            denom += xi[t][i][j];
+          }
+        }
+        denom ||= 1e-12;
+        for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) xi[t][i][j] /= denom;
+      }
+
+      const loglik = -c.reduce((acc, v) => acc + Math.log(v), 0);
+      return { gamma, xi, loglik };
+    }
+
+    function fitHMM2(y, iterations = 30) {
+      const ys = [...y].sort((a,b)=>a-b);
+      const q30 = ys[Math.floor(0.3 * (ys.length - 1))];
+      const q70 = ys[Math.floor(0.7 * (ys.length - 1))];
+      const mean = y.reduce((a,b)=>a+b,0)/y.length;
+      const var0 = y.reduce((a,b)=>a + (b-mean)*(b-mean), 0)/Math.max(1, y.length-1);
+
+      let pi = [0.5, 0.5];
+      let A = [[0.95, 0.05], [0.05, 0.95]];
+      let mu = [q30, q70];
+      let sigma2 = [var0 || 1, var0 || 1];
+      let fb = null;
+
+      for (let iter = 0; iter < iterations; iter++) {
+        fb = forwardBackward(y, pi, A, mu, sigma2);
+        const { gamma, xi } = fb;
+
+        pi = [gamma[0][0], gamma[0][1]];
+
+        for (let i = 0; i < 2; i++) {
+          let den = 0;
+          for (let t = 0; t < y.length - 1; t++) den += gamma[t][i];
+          den = Math.max(den, 1e-9);
+          for (let j = 0; j < 2; j++) {
+            let num = 0;
+            for (let t = 0; t < y.length - 1; t++) num += xi[t][i][j];
+            A[i][j] = num / den;
+          }
+          const rowsum = A[i][0] + A[i][1] || 1;
+          A[i][0] /= rowsum; A[i][1] /= rowsum;
+        }
+
+        for (let s = 0; s < 2; s++) {
+          let w = 0, m = 0;
+          for (let t = 0; t < y.length; t++) {
+            w += gamma[t][s];
+            m += gamma[t][s] * y[t];
+          }
+          w = Math.max(w, 1e-9);
+          mu[s] = m / w;
+
+          let v = 0;
+          for (let t = 0; t < y.length; t++) {
+            const d = y[t] - mu[s];
+            v += gamma[t][s] * d * d;
+          }
+          sigma2[s] = Math.max(v / w, 1e-8);
+        }
+      }
+
+      return { pi, A, mu, sigma2, gamma: fb.gamma, loglik: fb.loglik };
+    }
+
+    function drawSeries(canvas, y, gamma, mu, highState) {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0,0,W,H);
+      const pad = {l:40, r:12, t:10, b:25};
+      const minY = Math.min(...y, mu[0], mu[1]);
+      const maxY = Math.max(...y, mu[0], mu[1]);
+      const span = (maxY - minY) || 1;
+      const x = (i)=> pad.l + (W-pad.l-pad.r) * i / Math.max(1, y.length-1);
+      const yy = (v)=> pad.t + (H-pad.t-pad.b) * (1 - (v - minY)/span);
+
+      ctx.strokeStyle = '#27345f';
+      ctx.lineWidth = 1;
+      for (let k=0;k<=4;k++) {
+        const v = minY + (span*k/4);
+        const py = yy(v);
+        ctx.beginPath(); ctx.moveTo(pad.l, py); ctx.lineTo(W-pad.r, py); ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#a6b8ff'; ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      y.forEach((v,i)=>{ i===0?ctx.moveTo(x(i),yy(v)):ctx.lineTo(x(i),yy(v)); });
+      ctx.stroke();
+
+      const low = 1 - highState;
+      ctx.strokeStyle = '#76e38e'; ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.moveTo(pad.l, yy(mu[low])); ctx.lineTo(W-pad.r, yy(mu[low])); ctx.stroke();
+
+      ctx.strokeStyle = '#ffb86b';
+      ctx.beginPath(); ctx.moveTo(pad.l, yy(mu[highState])); ctx.lineTo(W-pad.r, yy(mu[highState])); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function drawProbs(canvas, gamma, highState) {
+      const p = gamma.map(g=>g[highState]);
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0,0,W,H);
+      const pad = {l:40, r:12, t:10, b:25};
+      const x = (i)=> pad.l + (W-pad.l-pad.r) * i / Math.max(1, p.length-1);
+      const y = (v)=> pad.t + (H-pad.t-pad.b) * (1-v);
+
+      ctx.strokeStyle = '#27345f';
+      for (let k=0;k<=4;k++) {
+        const py = y(k/4);
+        ctx.beginPath(); ctx.moveTo(pad.l, py); ctx.lineTo(W-pad.r, py); ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#ff8a8a'; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.moveTo(pad.l, y(0.5)); ctx.lineTo(W-pad.r, y(0.5)); ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = '#6ea8fe'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      p.forEach((v,i)=>{ i===0?ctx.moveTo(x(i),y(v)):ctx.lineTo(x(i),y(v)); });
+      ctx.stroke();
+    }
+
+    function renderStats(params, highState) {
+      const low = 1 - highState;
+      const stats = [
+        ['μ estado bajo', fmt(params.mu[low])],
+        ['σ estado bajo', fmt(Math.sqrt(params.sigma2[low]))],
+        ['μ estado alto', fmt(params.mu[highState])],
+        ['σ estado alto', fmt(Math.sqrt(params.sigma2[highState]))],
+        ['p(low→low)', fmt(params.A[low][low])],
+        ['p(alto→alto)', fmt(params.A[highState][highState])],
+        ['Duración esp. bajo', fmt(1 / Math.max(1e-6, 1 - params.A[low][low]), 1) + ' periodos'],
+        ['Duración esp. alto', fmt(1 / Math.max(1e-6, 1 - params.A[highState][highState]), 1) + ' periodos'],
+      ];
+      $('stats').innerHTML = stats.map(([k,v]) => `<div class="pill"><b>${k}</b><span>${v}</span></div>`).join('');
+    }
+
+    function renderInsights(params, gamma, highState) {
+      const low = 1 - highState;
+      const pHigh = gamma.map(g=>g[highState]);
+      const last = pHigh[pHigh.length-1];
+      const avgHigh = pHigh.reduce((a,b)=>a+b,0)/pHigh.length;
+      const volRatio = Math.sqrt(params.sigma2[highState]) / Math.sqrt(params.sigma2[low]);
+
+      $('insights').innerHTML = [
+        `La media del estado alto (${fmt(params.mu[highState])}) supera a la del estado bajo (${fmt(params.mu[low])}).`,
+        `La volatilidad relativa (σ alto / σ bajo) es ${fmt(volRatio)}.`,
+        `Persistencia: p(alto→alto)=${fmt(params.A[highState][highState])} y p(bajo→bajo)=${fmt(params.A[low][low])}.`,
+        `Probabilidad del estado alto en la última observación: ${fmt(last, 2)} (media histórica: ${fmt(avgHigh, 2)}).`,
+      ].map(x=>`<li>${x}</li>`).join('');
+    }
+
+    async function run() {
+      const btn = $('runBtn');
+      const status = $('status');
+      btn.disabled = true;
+      status.textContent = 'Descargando datos y estimando...';
+
+      try {
+        const id = $('series').value;
+        const transformMode = $('transform').value;
+        const w = Math.max(120, Math.min(2400, Number($('window').value) || 360));
+        const iters = Math.max(5, Math.min(100, Number($('iters').value) || 35));
+
+        const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
+        const csv = await res.text();
+        const { dates, values } = parseFRED(csv);
+
+        const { y: yAll, idxMap } = transform(values, transformMode);
+        if (yAll.length < 120) throw new Error('Muy pocos datos tras transformar.');
+
+        const start = Math.max(0, yAll.length - w);
+        const y = yAll.slice(start);
+        const datesY = idxMap.slice(start).map(i => dates[i]);
+
+        const fit = fitHMM2(y, iters);
+        const highState = fit.mu[0] > fit.mu[1] ? 0 : 1;
+
+        state.dates = datesY;
+        state.y = y;
+        state.gamma = fit.gamma;
+        state.params = fit;
+        state.highState = highState;
+        state.seriesName = id;
+
+        $('meta').textContent = `${id} | ${datesY[0]} → ${datesY[datesY.length-1]} | n=${y.length} | logLik=${fmt(fit.loglik,1)}`;
+        renderStats(fit, highState);
+        renderInsights(fit, fit.gamma, highState);
+        drawSeries($('seriesChart'), y, fit.gamma, fit.mu, highState);
+        drawProbs($('probChart'), fit.gamma, highState);
+
+        status.textContent = 'Listo. Interpreta el cambio de régimen con la curva de probabilidades.';
+      } catch (err) {
+        console.error(err);
+        status.textContent = `No se pudo completar: ${err.message}`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    $('runBtn').addEventListener('click', run);
+    run();
+  </script>
+</body>
+</html>
