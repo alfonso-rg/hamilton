@@ -447,21 +447,33 @@
         return { csv: cachedRaw, source: 'cache' };
       }
 
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 7000);
-      try {
-        const res = await fetch(`/api/fred?id=${encodeURIComponent(id)}`, { signal: controller.signal });
-        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
-        const csv = await res.text();
-        localStorage.setItem(key, csv);
-        localStorage.setItem(`${key}-ts`, String(Date.now()));
-        return { csv, source: 'network' };
-      } catch (err) {
-        if (cachedRaw) return { csv: cachedRaw, source: 'cache-stale' };
-        throw err;
-      } finally {
-        clearTimeout(timer);
+      const attempts = [12000, 18000];
+      let lastErr = null;
+
+      for (const timeoutMs of attempts) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
+          const res = await fetch(`/api/fred?id=${encodeURIComponent(id)}`, { signal: controller.signal });
+          clearTimeout(timer);
+
+          if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
+          const csv = await res.text();
+          localStorage.setItem(key, csv);
+          localStorage.setItem(`${key}-ts`, String(Date.now()));
+          return { csv, source: 'network' };
+        } catch (err) {
+          lastErr = err;
+        }
       }
+
+      if (cachedRaw) return { csv: cachedRaw, source: 'cache-stale' };
+
+      const msg = String(lastErr?.message || lastErr || 'error de red');
+      if (/abort|timeout/i.test(msg)) {
+        throw new Error('Tiempo de espera agotado al descargar datos. Reintenta en unos segundos.');
+      }
+      throw new Error(`Fallo descargando datos: ${msg}`);
     }
 
     async function run() {
@@ -476,7 +488,7 @@
         const w = Math.max(120, Math.min(2400, Number($('window').value) || 360));
         const iters = Math.max(5, Math.min(100, Number($('iters').value) || 35));
 
-                const { csv, source } = await fetchCsvWithCache(id);
+        const { csv, source } = await fetchCsvWithCache(id);
         const { dates, values } = parseFRED(csv);
 
         const { y: yAll, idxMap } = transform(values, transformMode);
