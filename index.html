@@ -448,7 +448,7 @@
         const w = Math.max(120, Math.min(2400, Number($('window').value) || 360));
         const iters = Math.max(5, Math.min(100, Number($('iters').value) || 35));
 
-        const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}`;
+        const url = `/api/fred?id=${encodeURIComponent(id)}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
         const csv = await res.text();
