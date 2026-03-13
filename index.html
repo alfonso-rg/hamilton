@@ -436,6 +436,34 @@
       ].map(x=>`<li>${x}</li>`).join('');
     }
 
+
+    async function fetchCsvWithCache(id) {
+      const key = `fred-cache-${id}`;
+      const cachedRaw = localStorage.getItem(key);
+      const cachedAt = Number(localStorage.getItem(`${key}-ts`) || 0);
+      const freshMs = 1000 * 60 * 60 * 24 * 7;
+
+      if (cachedRaw && (Date.now() - cachedAt) < freshMs) {
+        return { csv: cachedRaw, source: 'cache' };
+      }
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 7000);
+      try {
+        const res = await fetch(`/api/fred?id=${encodeURIComponent(id)}`, { signal: controller.signal });
+        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
+        const csv = await res.text();
+        localStorage.setItem(key, csv);
+        localStorage.setItem(`${key}-ts`, String(Date.now()));
+        return { csv, source: 'network' };
+      } catch (err) {
+        if (cachedRaw) return { csv: cachedRaw, source: 'cache-stale' };
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     async function run() {
       const btn = $('runBtn');
       const status = $('status');
@@ -448,10 +476,7 @@
         const w = Math.max(120, Math.min(2400, Number($('window').value) || 360));
         const iters = Math.max(5, Math.min(100, Number($('iters').value) || 35));
 
-        const url = `/api/fred?id=${encodeURIComponent(id)}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
-        const csv = await res.text();
+                const { csv, source } = await fetchCsvWithCache(id);
         const { dates, values } = parseFRED(csv);
 
         const { y: yAll, idxMap } = transform(values, transformMode);
@@ -477,7 +502,11 @@
         drawSeries($('seriesChart'), y, fit.gamma, fit.mu, highState);
         drawProbs($('probChart'), fit.gamma, highState);
 
-        status.textContent = 'Listo. Interpreta el cambio de régimen con la curva de probabilidades.';
+        status.textContent = source === 'network'
+          ? 'Listo. Datos descargados y modelo estimado.'
+          : (source === 'cache'
+              ? 'Listo. Datos cargados desde caché local (rápido).'
+              : 'Listo. Se usó caché local por problema temporal de red.');
       } catch (err) {
         console.error(err);
         status.textContent = `No se pudo completar: ${err.message}`;
